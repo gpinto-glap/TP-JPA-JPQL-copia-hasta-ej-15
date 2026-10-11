@@ -67,7 +67,7 @@ public class PruebaJPQL {
                 .getResultList();
             System.out.println("Cantidad encontradas: " + facturasFiltro.size());
 
-            // 6. Búsqueda por Patrón de Texto (Ajustado a Cliente: denominacion y cuitCuil)
+            // 6. Búsqueda por Patrón de Texto
             System.out.println("\n--- Ejercicio 6: Búsqueda de Clientes por texto o CUIT ---");
             List<Cliente> clientes = em.createQuery(
                 "SELECT c FROM Cliente c WHERE LOWER(c.denominacion) LIKE LOWER(:texto) OR c.cuitCuil LIKE :cuitPrefijo", Cliente.class)
@@ -156,7 +156,7 @@ public class PruebaJPQL {
                 System.out.println("Factura N°: " + f.getNumero() + " | Importe: $" + f.getImporteTotal());
             }
 
-            // 15. Filtrado por Cliente (Ajustado a cuitCuil)
+            // 15. Filtrado por Cliente
             System.out.println("\n--- Ejercicio 15: Facturas asociadas a CUIT de Cliente ---");
             List<FacturaVenta> facturasCliente = em.createQuery(
                 "SELECT f FROM FacturaVenta f WHERE f.cliente.cuitCuil = :cuitCliente", FacturaVenta.class)
@@ -164,6 +164,95 @@ public class PruebaJPQL {
                 .getResultList();
             for (FacturaVenta f : facturasCliente) {
                 System.out.println("Factura N°: " + f.getNumero() + " | CUIT/CUIL Cliente: " + f.getCliente().getCuitCuil());
+            }
+
+
+            System.out.println("\n========== EJECUTANDO CONSULTAS NIVEL 4 ==========\n");
+
+            // 16. Agrupamiento Básico (GROUP BY)
+            System.out.println("--- Ejercicio 16: Facturación por Punto de Venta ---");
+            List<Object[]> resPV = em.createQuery(
+                "SELECT pv.descripcion, COUNT(f), SUM(f.importeTotal) " +
+                "FROM FacturaVenta f JOIN f.puntoVenta pv " +
+                "GROUP BY pv.id, pv.descripcion", Object[].class)
+                .getResultList();
+            for (Object[] fila : resPV) {
+                System.out.println("PV: " + fila[0] + " | Cant. Facturas: " + fila[1] + " | Total Facturado: $" + fila[2]);
+            }
+
+            // 17. Agrupamiento con Filtro de Grupo (HAVING)
+            System.out.println("\n--- Ejercicio 17: Usuarios de carga con más de 5 facturas ---");
+            List<String> usuariosTop = em.createQuery(
+                "SELECT u.usuario " +
+                "FROM FacturaVenta f JOIN f.usuarioCarga u " +
+                "GROUP BY u.id, u.usuario " +
+                "HAVING COUNT(f) > 5", String.class)
+                .getResultList();
+            System.out.println("Usuarios con > 5 facturas: " + usuariosTop.size());
+
+            // 18. Agrupamiento y Agregación sobre Entidades Relacionadas
+            System.out.println("\n--- Ejercicio 18: Unidades vendidas y subtotal por Marca ---");
+            List<Object[]> resMarcas = em.createQuery(
+                "SELECT m.denominacion, SUM(d.cantidad), SUM(d.subtotal) " +
+                "FROM FacturaVentaDetalle d JOIN d.listaPrecioArticulo lpa JOIN lpa.articulo a JOIN a.marca m " +
+                "GROUP BY m.id, m.denominacion", Object[].class)
+                .getResultList();
+            for (Object[] fila : resMarcas) {
+                System.out.println("Marca: " + fila[0] + " | Cant. Unidades: " + fila[1] + " | Subtotal: $" + fila[2]);
+            }
+
+            // 19. Agrupamiento por Condición de IVA
+            System.out.println("\n--- Ejercicio 19: Total facturado por Condición de IVA ---");
+            List<Object[]> resIva = em.createQuery(
+                "SELECT ci.denominacion, SUM(f.importeTotal) " +
+                "FROM FacturaVenta f JOIN f.condicionIva ci " +
+                "GROUP BY ci.id, ci.denominacion", Object[].class)
+                .getResultList();
+            for (Object[] fila : resIva) {
+                System.out.println("Condición IVA: " + fila[0] + " | Total: $" + fila[1]);
+            }
+
+
+            System.out.println("\n========== EJECUTANDO CONSULTAS NIVEL 5 ==========\n");
+
+            // 20. Subconsulta Correlacionada con EXISTS
+            System.out.println("--- Ejercicio 20: Marcas con al menos un artículo facturado ---");
+            List<Marca> marcasFacturadas = em.createQuery(
+                "SELECT m FROM Marca m WHERE EXISTS (" +
+                "   SELECT d FROM FacturaVentaDetalle d JOIN d.listaPrecioArticulo lpa JOIN lpa.articulo a " +
+                "   WHERE a.marca = m" +
+                ")", Marca.class)
+                .getResultList();
+            for (Marca m : marcasFacturadas) {
+                System.out.println("Marca Facturada: " + m.getDenominacion());
+            }
+
+            // 21. Subconsulta Correlacionada con NOT EXISTS
+            System.out.println("\n--- Ejercicio 21: Artículos nunca facturados ---");
+            List<Articulo> articulosNuncaVendidos = em.createQuery(
+                "SELECT a FROM Articulo a WHERE NOT EXISTS (" +
+                "   SELECT d FROM FacturaVentaDetalle d JOIN d.listaPrecioArticulo lpa " +
+                "   WHERE lpa.articulo = a" +
+                ")", Articulo.class)
+                .getResultList();
+            for (Articulo a : articulosNuncaVendidos) {
+                System.out.println("Artículo no vendido: " + a.getDenominacion() + " (Código: " + a.getCodigo() + ")");
+            }
+
+            // 22. Proyección Condicional (CASE WHEN)
+            System.out.println("\n--- Ejercicio 22: Clasificación de Facturas por Importe (CASE WHEN) ---");
+            List<Object[]> facturasClasificadas = em.createQuery(
+                "SELECT f.numero, f.importeTotal, " +
+                "CASE " +
+                "   WHEN f.importeTotal > 50000.0 THEN 'ALTO VALOR' " +
+                "   WHEN f.importeTotal BETWEEN 10000.0 AND 50000.0 THEN 'MEDIO VALOR' " +
+                "   ELSE 'BAJO VALOR' " +
+                "END " +
+                "FROM FacturaVenta f " +
+                "ORDER BY f.importeTotal DESC", Object[].class)
+                .getResultList();
+            for (Object[] fila : facturasClasificadas) {
+                System.out.println("Factura N°: " + fila[0] + " | Importe: $" + fila[1] + " | Categoría: " + fila[2]);
             }
 
         } catch (Exception e) {
